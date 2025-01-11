@@ -1,22 +1,80 @@
 #include "parser.h"
+#include <cstdio>
+#include <memory>
 
 namespace parser {
 
-string LetStatement::token_literal(){
+string LetStatement::token_literal() const {
     return let_token.val;
 }
 
-string Identifier::token_literal(){
+string Identifier::token_literal() const {
     return token.val;
 }
 
-bool test_let_statement(Statement* s, string id){
+bool Parser::_cur_tok_is(lexer::TokenType t) {
+    return cur_token.type == t;
+}
+
+bool Parser::_peek_tok_is(lexer::TokenType t){
+    return peek_token.type == t;
+}
+
+bool Parser::_expect_peek(lexer::TokenType t){
+    if(_peek_tok_is(t)){
+        next_token();
+        return true;
+    }else{
+        return false;
+    }
+}
+
+unique_ptr<LetStatement> Parser::parse_let_statement(){
+    auto stmt = make_unique<LetStatement>();  
+    stmt->let_token = cur_token;
+
+    if(!_expect_peek(lexer::TokenType::ID)){
+        return nullptr;
+    }
+
+    stmt->name = make_unique<Identifier>(cur_token, cur_token.val);
+    if(!_expect_peek(lexer::TokenType::ASSIGN)){
+        return nullptr;
+    }
+
+    while(!_cur_tok_is(lexer::TokenType::SEMICOLON)){
+        next_token();
+    }
+
+    return stmt;
+}
+
+unique_ptr<Statement> Parser::parse_statement(){
+    switch(cur_token.type){
+        case lexer::TokenType::LET: return parse_let_statement();
+        default: return nullptr;
+    }
+}
+
+unique_ptr<Program> Parser::parse_program(){
+    auto program = std::make_unique<Program>();
+    while(cur_token.type != lexer::TokenType::ENDOF){
+        auto stmt = parse_statement();
+        if(stmt != nullptr){
+            program->statements.push_back(std::move(stmt));
+        }
+        next_token();
+    }
+    return program;
+}
+
+bool test_let_statement(const Statement* s, string id){
     if(s->token_literal() != "let"){
         printf("expected to get `let` but got %s\n", s->token_literal().c_str());
         return false;
     }
 
-    auto let_statment = dynamic_cast<LetStatement*>(s);
+    auto let_statment = dynamic_cast<const LetStatement*>(s);
     if(let_statment == nullptr){
         printf("could not cast statment to let_statement\n");
         return false;
@@ -49,18 +107,20 @@ let foobar = 838383;
     }
 
     if(program->statements.size() != 3){
-        printf("program does not contain 3 statements\n");
+        printf("program does not contain 3 statements: found %ld statements\n",
+            program->statements.size());
         return;
     }
 
     vector<string> expected_id = {"x", "y", "foobar"};
 
     for(int i=0; i<expected_id.size(); i++){
-        auto stmt= program->statements[i].get();
+        const Statement* stmt= program->statements[i].get();
         if(!test_let_statement(stmt, expected_id[i])){
             return;
         }
     }
+    printf("[3/3] all test cases passed !!");
 }
 
 
