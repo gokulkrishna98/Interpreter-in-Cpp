@@ -53,6 +53,8 @@ struct Parser {
     lexer::Lexer l;
     lexer::Token cur_token;
     lexer::Token peek_token;
+    vector<string> errors;
+
     Parser(lexer::Lexer l) : l (l) {
         next_token();
         next_token();
@@ -66,6 +68,8 @@ struct Parser {
     bool _cur_tok_is(lexer::TokenType t);
     bool _peek_tok_is(lexer::TokenType t); 
     bool _expect_peek(lexer::TokenType t);
+    void _peek_error(lexer::TokenType t);
+    vector<string> get_errors();
 
     unique_ptr<LetStatement> parse_let_statement();
     unique_ptr<Program> parse_program();

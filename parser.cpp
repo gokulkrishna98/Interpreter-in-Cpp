@@ -1,6 +1,7 @@
 #include "parser.h"
 #include <cstdio>
 #include <memory>
+#include <fmt/format.h>
 
 namespace parser {
 
@@ -25,8 +26,23 @@ bool Parser::_expect_peek(lexer::TokenType t){
         next_token();
         return true;
     }else{
+        _peek_error(t);
         return false;
     }
+}
+
+vector<string> Parser::get_errors(){
+    return errors;
+}
+
+// TODO: write helper function to conver enum to string
+void Parser::_peek_error(lexer::TokenType t){
+    string error_msg = fmt::format("expected next token to be {}, got {} instead",
+        t, 
+        peek_token.type    
+    );
+    errors.push_back(error_msg);
+    return;
 }
 
 unique_ptr<LetStatement> Parser::parse_let_statement(){
@@ -89,6 +105,18 @@ bool test_let_statement(const Statement* s, string id){
     return true;
 }
 
+void check_parse_errors(vector<string> errors){
+    if(errors.empty()){
+        return;
+    }
+
+    printf("parser has [%ld] errors\n", errors.size());
+    for(auto &s: errors){
+        printf("parser error: %s\n", s.c_str());
+    }
+    return;
+}
+
 void test_let_statements(){
     string input = R"(
 let x = 5;
@@ -96,10 +124,17 @@ let y = 10;
 let foobar = 838383;
     )";
 
+    input = R"(
+let x 5;
+let = 10;
+let 838383;
+    )";
+
     auto l = lexer::Lexer(input);
     auto p = Parser(l);
 
     auto program = p.parse_program();
+    check_parse_errors(p.get_errors());
 
     if(program == nullptr){
         printf("parse program returned nullptr\n");
@@ -120,7 +155,7 @@ let foobar = 838383;
             return;
         }
     }
-    printf("[3/3] all test cases passed !!");
+    printf("[3/3] all test cases passed !!\n");
 }
 
 
