@@ -1,4 +1,5 @@
 #include <string>
+#include <unordered_map>
 using namespace std;
 
 namespace lexer {
@@ -65,5 +66,6 @@ struct Lexer {
     Token next_token();
 };
 
+string enum_to_string(TokenType t);
 void test_next_token();
 }

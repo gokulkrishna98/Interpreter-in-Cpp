@@ -9,6 +9,36 @@ using namespace std;
 
 namespace lexer {
 
+unordered_map<TokenType, string> enum_to_string_map = {
+    {TokenType::ILLEGAL, "ILLEGAL"},
+    {TokenType::ENDOF, "ENDOF"},
+    {TokenType::ID, "ID"},
+    {TokenType::INT, "INT"},
+    {TokenType::ASSIGN, "ASSIGN"},
+    {TokenType::PLUS, "PLUS"},
+    {TokenType::MINUS, "MINUS"},
+    {TokenType::BANG, "BANG"},
+    {TokenType::ASTERISK, "ASTERISK"},
+    {TokenType::FSLASH, "FSLASH"},
+    {TokenType::LT, "LT"},
+    {TokenType::GT, "GT"},
+    {TokenType::EQ, "EQ"},
+    {TokenType::NEQ, "NEQ"},
+    {TokenType::COMMA, "COMMA"},
+    {TokenType::SEMICOLON, "SEMICOLON"},
+    {TokenType::LPAREN, "LPAREN"},
+    {TokenType::RPAREN, "RPAREN"},
+    {TokenType::LBRAC, "LBRAC"},
+    {TokenType::RBRAC, "RBRAC"},
+    {TokenType::FUNCTION, "FUNCTION"},
+    {TokenType::LET, "LET"},
+    {TokenType::TRUE, "TRUE"},
+    {TokenType::FALSE, "FALSE"},
+    {TokenType::IF, "IF"},
+    {TokenType::ELSE, "ELSE"},
+    {TokenType::RETURN, "RETURN"},
+};
+
 unordered_map<string, TokenType> keywords = {
     {"let", TokenType::LET},
     {"fn", TokenType::FUNCTION},
@@ -18,6 +48,10 @@ unordered_map<string, TokenType> keywords = {
     {"else", TokenType::ELSE},
     {"return", TokenType::RETURN}
 };
+
+string enum_to_string(TokenType t){
+    return enum_to_string_map[t];
+}
 
 TokenType lookup_id(string id){
     if(keywords.find(id) != keywords.end()){

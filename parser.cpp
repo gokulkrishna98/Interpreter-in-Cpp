@@ -42,8 +42,8 @@ vector<string> Parser::get_errors(){
 // TODO: write helper function to conver enum to string
 void Parser::_peek_error(lexer::TokenType t){
     string error_msg = fmt::format("expected next token to be {}, got {} instead",
-        t, 
-        peek_token.type    
+        lexer::enum_to_string(t), 
+        lexer::enum_to_string(peek_token.type)
     );
     errors.push_back(error_msg);
     return;
@@ -141,11 +141,11 @@ let y = 10;
 let foobar = 838383;
     )";
 
-//     input = R"(
-// let x 5;
-// let = 10;
-// let 838383;
-//     )";
+    input = R"(
+let x 5;
+let = 10;
+let 838383;
+    )";
 
     auto l = lexer::Lexer(input);
     auto p = Parser(l);
