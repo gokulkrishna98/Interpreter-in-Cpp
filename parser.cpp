@@ -9,6 +9,10 @@ string LetStatement::token_literal() const {
     return let_token.val;
 }
 
+string ReturnStatement::token_literal() const {
+    return ret_token.val;
+}
+
 string Identifier::token_literal() const {
     return token.val;
 }
@@ -58,6 +62,7 @@ unique_ptr<LetStatement> Parser::parse_let_statement(){
         return nullptr;
     }
 
+    // skipping parsing expr
     while(!_cur_tok_is(lexer::TokenType::SEMICOLON)){
         next_token();
     }
@@ -65,9 +70,21 @@ unique_ptr<LetStatement> Parser::parse_let_statement(){
     return stmt;
 }
 
+unique_ptr<ReturnStatement> Parser::parse_ret_statement(){
+    auto stmt = make_unique<ReturnStatement>();
+    stmt->ret_token = cur_token;
+    next_token();
+    // skipping parsing expr
+    while(!_cur_tok_is(lexer::TokenType::SEMICOLON)){
+        next_token();
+    }
+    return stmt;
+}
+
 unique_ptr<Statement> Parser::parse_statement(){
     switch(cur_token.type){
         case lexer::TokenType::LET: return parse_let_statement();
+        case lexer::TokenType::RETURN: return parse_ret_statement();
         default: return nullptr;
     }
 }
@@ -124,11 +141,11 @@ let y = 10;
 let foobar = 838383;
     )";
 
-    input = R"(
-let x 5;
-let = 10;
-let 838383;
-    )";
+//     input = R"(
+// let x 5;
+// let = 10;
+// let 838383;
+//     )";
 
     auto l = lexer::Lexer(input);
     auto p = Parser(l);
@@ -156,6 +173,52 @@ let 838383;
         }
     }
     printf("[3/3] all test cases passed !!\n");
+    return;
+}
+
+
+void test_ret_statements(){
+    string input = R"(
+return 5;
+return 10;
+return 993322;
+    )";
+    
+    auto l = lexer::Lexer(input);
+    auto p = Parser(l);
+
+    auto program = p.parse_program();
+    check_parse_errors(p.get_errors());
+
+    if(program == nullptr){
+        printf("parse program returned nullptr\n");
+        return;
+    }
+
+    if(program->statements.size() != 3){
+        printf("program does not contain 3 statements: found %ld statements\n",
+            program->statements.size());
+        return;
+    }
+
+
+    for(int i=0; i<program->statements.size(); i++){
+        const ReturnStatement* stmt = 
+            dynamic_cast<ReturnStatement*>(program->statements[i].get());
+        if(stmt == nullptr){
+            printf("got nullptr statement, not a return statement\n");
+            return;
+        }
+
+        if(stmt->ret_token.val != "return"){
+            printf("returnstmt.token is 'return', but got %s\n", 
+                stmt->ret_token.val.c_str());
+            return;
+        }
+    }
+    printf("[3/3] all test cases passed !!\n");
+    return;
+
 }
 
 

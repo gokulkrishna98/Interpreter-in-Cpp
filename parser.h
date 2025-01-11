@@ -7,7 +7,6 @@ using namespace std;
 
 namespace parser {
 
-
 struct Node {
     virtual string token_literal() const = 0;
     virtual ~Node() {};
@@ -32,6 +31,8 @@ struct Identifier : Expression {
     Identifier(lexer::Token token, string value) : token(token), value(value){}
 };
 
+struct ReturnValue {};
+
 // syntax:
 // let-statement := <let> <name> `=` <expression> 
 struct LetStatement : Statement {
@@ -39,6 +40,13 @@ struct LetStatement : Statement {
     unique_ptr<Identifier> name;
     unique_ptr<Expression> value;
     void statement_node() const {}
+    string token_literal() const;
+};
+
+struct ReturnStatement : Statement {
+    lexer::Token ret_token;
+    ReturnValue expression;
+    void statement_node () const {}
     string token_literal() const;
 };
 
@@ -72,10 +80,12 @@ struct Parser {
     vector<string> get_errors();
 
     unique_ptr<LetStatement> parse_let_statement();
+    unique_ptr<ReturnStatement> parse_ret_statement();
     unique_ptr<Program> parse_program();
     unique_ptr<Statement> parse_statement();
 };
 
 void test_let_statements();
+void test_ret_statements();
 
 }
