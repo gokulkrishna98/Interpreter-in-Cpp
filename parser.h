@@ -10,12 +10,14 @@ namespace parser {
 
 struct Node {
     virtual string token_literal() = 0;
+    virtual ~Node() {};
 };
 
 
 // abstract class for all the statements
 struct Statement : public Node {
     virtual void statement_node() = 0;
+    virtual ~Statement() {};
 };
 
 struct Expression : public Node {
@@ -65,5 +67,7 @@ struct Parser {
         return nullptr;
     }
 };
+
+void test_let_statements();
 
 }
