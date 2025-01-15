@@ -5,15 +5,15 @@
 
 namespace parser {
 
-string LetStatement::token_literal() const {
+std::string LetStatement::token_literal() const {
     return let_token.val;
 }
 
-string ReturnStatement::token_literal() const {
+std::string ReturnStatement::token_literal() const {
     return ret_token.val;
 }
 
-string Identifier::token_literal() const {
+std::string Identifier::token_literal() const {
     return token.val;
 }
 
@@ -35,13 +35,13 @@ bool Parser::_expect_peek(lexer::TokenType t){
     }
 }
 
-vector<string> Parser::get_errors(){
+vector<std::string> Parser::get_errors(){
     return errors;
 }
 
 // TODO: write helper function to conver enum to string
 void Parser::_peek_error(lexer::TokenType t){
-    string error_msg = fmt::format("expected next token to be {}, got {} instead",
+    std::string error_msg = fmt::format("expected next token to be {}, got {} instead",
         lexer::enum_to_string(t), 
         lexer::enum_to_string(peek_token.type)
     );
@@ -101,7 +101,51 @@ unique_ptr<Program> Parser::parse_program(){
     return program;
 }
 
-bool test_let_statement(const Statement* s, string id){
+
+std::string Program::string() const{
+    std::string program_string = "";
+    for(auto &stmt : statements){
+        program_string += stmt->string();
+    }
+    return program_string;
+}
+
+std::string LetStatement::string() const {
+    std::string let_stmt_string = "";
+    let_stmt_string += (token_literal() + " ");
+    let_stmt_string += (name->string());
+    let_stmt_string += " = ";
+    if(value != nullptr){
+        let_stmt_string += value->string();
+    }
+    let_stmt_string += ";";
+    return let_stmt_string;
+}
+
+std::string ReturnStatement::string() const {
+    std::string ret_stmt_string = ""; 
+    ret_stmt_string += (token_literal() + " ");
+    if(return_value != nullptr){
+        ret_stmt_string += return_value->string();
+    }
+    ret_stmt_string += ";";
+    return ret_stmt_string;
+}
+
+std::string ExpressionStatement::string() const {
+    if(expr != nullptr){
+        return expr->string();
+    }
+    return "";
+}
+
+std::string Identifier::string() const {
+    return value;
+}
+
+
+
+bool test_let_statement(const Statement* s, std::string id){
     if(s->token_literal() != "let"){
         printf("expected to get `let` but got %s\n", s->token_literal().c_str());
         return false;
@@ -122,7 +166,7 @@ bool test_let_statement(const Statement* s, string id){
     return true;
 }
 
-void check_parse_errors(vector<string> errors){
+void check_parse_errors(vector<std::string> errors){
     if(errors.empty()){
         return;
     }
@@ -135,7 +179,7 @@ void check_parse_errors(vector<string> errors){
 }
 
 void test_let_statements(){
-    string input = R"(
+    std::string input = R"(
 let x = 5;
 let y = 10;
 let foobar = 838383;
@@ -164,7 +208,7 @@ let 838383;
         return;
     }
 
-    vector<string> expected_id = {"x", "y", "foobar"};
+    vector<std::string> expected_id = {"x", "y", "foobar"};
 
     for(int i=0; i<expected_id.size(); i++){
         const Statement* stmt= program->statements[i].get();
@@ -178,7 +222,7 @@ let 838383;
 
 
 void test_ret_statements(){
-    string input = R"(
+    std::string input = R"(
 return 5;
 return 10;
 return 993322;
@@ -218,7 +262,27 @@ return 993322;
     }
     printf("[3/3] all test cases passed !!\n");
     return;
+}
 
+void test_string(){
+    auto stmt = std::make_unique<LetStatement>();
+    stmt->let_token = lexer::Token(lexer::TokenType::LET, "let"); 
+    stmt->name = std::make_unique<Identifier>(
+        lexer::Token(lexer::TokenType::ID, "my_var"), 
+        "my_var");
+    stmt->value = std::make_unique<Identifier>(
+        lexer::Token(lexer::TokenType::ID, "another_var"), 
+        "another_var");
+    Program program;
+    program.statements.push_back(std::move(stmt));
+
+    if(program.string() != "let my_var = another_var;"){
+        printf("program.string(), is wrong. got %s\n", program.string().c_str());
+        return;
+    }
+
+    printf("[success] testing string() in ast\n");
+    return;
 }
 
 

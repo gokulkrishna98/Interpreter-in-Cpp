@@ -3,12 +3,12 @@
 #include <memory>
 #include "lexer.h"
 
-using namespace std;
 
 namespace parser {
 
 struct Node {
-    virtual string token_literal() const = 0;
+    virtual std::string token_literal() const = 0;
+    virtual std::string string() const = 0;
     virtual ~Node() {};
 };
 
@@ -21,40 +21,56 @@ struct Statement : public Node {
 
 struct Expression : public Node {
     virtual void expression_node() const = 0;
+    virtual ~Expression() {}
 };
 
 struct Identifier : Expression {
     lexer::Token token;
-    string value;
+    std::string value;
+
+    Identifier(lexer::Token token, std::string value) : token(token), value(value){}
     void expression_node() const {}
-    string token_literal() const;
-    Identifier(lexer::Token token, string value) : token(token), value(value){}
+    std::string token_literal() const;
+    std::string string() const;
 };
 
-struct ReturnValue {};
 
 // syntax:
 // let-statement := <let> <name> `=` <expression> 
 struct LetStatement : Statement {
     lexer::Token let_token;
-    unique_ptr<Identifier> name;
-    unique_ptr<Expression> value;
+    std::unique_ptr<Identifier> name;
+    std::unique_ptr<Expression> value;
+
     void statement_node() const {}
-    string token_literal() const;
+    std::string token_literal() const;
+    std::string string() const;
 };
 
 struct ReturnStatement : Statement {
     lexer::Token ret_token;
-    ReturnValue expression;
+    std::unique_ptr<Expression> return_value;
+
     void statement_node () const {}
-    string token_literal() const;
+    std::string token_literal() const;
+    std::string string() const;
+};
+
+struct ExpressionStatement : Statement {
+    lexer::Token expr_token; // first token in the expression
+    std::unique_ptr<Expression> expr;
+
+    void statement_node () const {}
+    std::string token_literal() const;
+    std::string string() const;
 };
 
 struct Program {
     vector<unique_ptr<Statement>> statements;
-    string token_literal(){
+    std::string token_literal() const {
         return (!statements.empty()) ? statements[0]->token_literal() : "";
     }
+    std::string string() const;
 };
 
 struct Parser {
@@ -87,5 +103,6 @@ struct Parser {
 
 void test_let_statements();
 void test_ret_statements();
+void test_string();
 
 }
