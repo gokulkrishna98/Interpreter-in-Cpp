@@ -1,10 +1,13 @@
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <memory>
+#include <functional>
 #include "lexer.h"
 
 
 namespace parser {
+
 
 struct Node {
     virtual std::string token_literal() const = 0;
@@ -73,15 +76,25 @@ struct Program {
     std::string string() const;
 };
 
+std::unique_ptr<Expression> prefix_parse_fn();
+std::unique_ptr<Expression> infix_parse_fn(std::unique_ptr<Expression>);
+
 struct Parser {
     lexer::Lexer l;
     lexer::Token cur_token;
     lexer::Token peek_token;
     vector<string> errors;
 
+    // two maps for infix and prefix parse fns
+    unordered_map<lexer::TokenType, 
+        std::function<std::unique_ptr<Expression>()>> prefix_parse_fns;
+    unordered_map<lexer::TokenType, 
+        std::function<std::unique_ptr<Expression>(std::unique_ptr<Expression>)>> infix_parse_fns;
+
     Parser(lexer::Lexer l) : l (l) {
         next_token();
         next_token();
+        register_prefix(lexer::TokenType::ID, std::bind(&Parser::parse_identifier, this));
     };
 
     void next_token(){
@@ -95,14 +108,26 @@ struct Parser {
     void _peek_error(lexer::TokenType t);
     vector<string> get_errors();
 
-    unique_ptr<LetStatement> parse_let_statement();
-    unique_ptr<ReturnStatement> parse_ret_statement();
-    unique_ptr<Program> parse_program();
-    unique_ptr<Statement> parse_statement();
+    std::unique_ptr<LetStatement> parse_let_statement();
+    std::unique_ptr<ReturnStatement> parse_ret_statement();
+    std::unique_ptr<ExpressionStatement> parse_expression_statement();
+
+    std::unique_ptr<Program> parse_program();
+    std::unique_ptr<Statement> parse_statement();
+    std::unique_ptr<Expression> parse_expression();
+    std::unique_ptr<Expression> parse_identifier();
+
+    
+
+    void register_prefix(lexer::TokenType token_type, 
+        std::function<std::unique_ptr<Expression>()> fn);
+    void register_infix(lexer::TokenType token_type, 
+        std::function<std::unique_ptr<Expression>(std::unique_ptr<Expression>)>);
 };
 
 void test_let_statements();
 void test_ret_statements();
 void test_string();
+void test_identifier_expression();
 
 }

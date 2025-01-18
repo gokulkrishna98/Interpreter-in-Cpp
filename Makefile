@@ -14,6 +14,7 @@ all:
 	make repl
 	make interp
 run:
+	make all
 	./interp.out
 clean:
 	rm -f interp.out lexer.out repl.out parser.out

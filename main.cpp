@@ -10,6 +10,7 @@ int main(int argc, char** argv){
     // repl::start();
     // parser::test_let_statements();
     // parser::test_ret_statements();
-    parser::test_string();
+    // parser::test_string();
+    parser::test_identifier_expression();
     return 0;
 }

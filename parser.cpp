@@ -2,8 +2,19 @@
 #include <cstdio>
 #include <memory>
 #include <fmt/format.h>
+#include <unordered_map>
 
 namespace parser {
+
+enum operation_prec {
+    LOWEST,
+    EQUALS,
+    LESSGREATER,
+    SUM,
+    PRODUCT,
+    PREFIX,
+    CALL
+};
 
 std::string LetStatement::token_literal() const {
     return let_token.val;
@@ -11,6 +22,10 @@ std::string LetStatement::token_literal() const {
 
 std::string ReturnStatement::token_literal() const {
     return ret_token.val;
+}
+
+std::string ExpressionStatement::token_literal() const {
+    return expr_token.val;
 }
 
 std::string Identifier::token_literal() const {
@@ -57,7 +72,7 @@ unique_ptr<LetStatement> Parser::parse_let_statement(){
         return nullptr;
     }
 
-    stmt->name = make_unique<Identifier>(cur_token, cur_token.val);
+    stmt->name = std::make_unique<Identifier>(cur_token, cur_token.val);
     if(!_expect_peek(lexer::TokenType::ASSIGN)){
         return nullptr;
     }
@@ -71,7 +86,7 @@ unique_ptr<LetStatement> Parser::parse_let_statement(){
 }
 
 unique_ptr<ReturnStatement> Parser::parse_ret_statement(){
-    auto stmt = make_unique<ReturnStatement>();
+    auto stmt = std::make_unique<ReturnStatement>();
     stmt->ret_token = cur_token;
     next_token();
     // skipping parsing expr
@@ -81,11 +96,35 @@ unique_ptr<ReturnStatement> Parser::parse_ret_statement(){
     return stmt;
 }
 
+unique_ptr<Expression> Parser::parse_expression(){
+    auto prefix = prefix_parse_fns[cur_token.type];
+    if(prefix == nullptr){
+        return nullptr;
+    }
+
+    auto left_expr = prefix();
+    return left_expr;
+}
+
+unique_ptr<Expression> Parser::parse_identifier(){
+    return std::make_unique<Identifier>(cur_token, cur_token.val);
+}
+
+unique_ptr<ExpressionStatement> Parser::parse_expression_statement(){
+    auto stmt = std::make_unique<ExpressionStatement>();
+    stmt->expr_token = cur_token;
+    stmt->expr = parse_expression();
+    if(_peek_tok_is(lexer::TokenType::SEMICOLON)){
+        next_token();
+    }
+    return stmt;
+}
+
 unique_ptr<Statement> Parser::parse_statement(){
     switch(cur_token.type){
         case lexer::TokenType::LET: return parse_let_statement();
         case lexer::TokenType::RETURN: return parse_ret_statement();
-        default: return nullptr;
+        default: return parse_expression_statement();
     }
 }
 
@@ -141,6 +180,16 @@ std::string ExpressionStatement::string() const {
 
 std::string Identifier::string() const {
     return value;
+}
+
+void Parser::register_prefix(lexer::TokenType token_type,
+    std::function<std::unique_ptr<Expression>()> fn){
+    prefix_parse_fns[token_type] = fn;
+}
+
+void Parser::register_infix(lexer::TokenType token_type,
+    std::function<std::unique_ptr<Expression>(std::unique_ptr<Expression>)> fn){
+    infix_parse_fns[token_type] = fn;
 }
 
 
@@ -283,6 +332,42 @@ void test_string(){
 
     printf("[success] testing string() in ast\n");
     return;
+}
+
+void test_identifier_expression(){
+    std::string input = "foobar;";
+    auto l = lexer::Lexer(input);
+    Parser p(l);
+    auto program = p.parse_program();
+    check_parse_errors(p.get_errors());
+
+    if(program->statements.size() != 1){
+        printf("[error] program has no enough statements %ld\n", program->statements.size());
+        return;
+    }
+
+    const ExpressionStatement* stmt = dynamic_cast<ExpressionStatement*>(program->statements[0].get());
+    if(stmt == nullptr){
+        printf("[error] the statment is not a expression statement\n");
+        return;
+    }
+
+    auto ident = dynamic_cast<Identifier*>(stmt->expr.get());
+    if(ident == nullptr){
+        printf("[error] the expression in the statement is not identifier\n");
+        return;
+    }
+
+    if(ident->value != "foobar"){
+        printf("ident not %s, got %s\n", "foobar", ident->value.c_str());
+        return;
+    }
+
+    if(ident->token_literal() != "foobar"){
+        printf("ident.token_literal not %s, got %s\n", "foobar", ident->value.c_str());
+        return;
+    }
+
 }
 
 
