@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -32,6 +33,37 @@ struct Identifier : Expression {
     std::string value;
 
     Identifier(lexer::Token token, std::string value) : token(token), value(value){}
+    void expression_node() const {}
+    std::string token_literal() const;
+    std::string string() const;
+};
+
+struct IntegerLiteral : Expression {
+    lexer::Token token;
+    int64_t val;
+
+    IntegerLiteral(lexer::Token token, int64_t val) : token(token), val(val){}
+    void expression_node() const {}
+    std::string token_literal() const;
+    std::string string() const;
+};
+
+struct PrefixExpression : Expression {
+    lexer::Token token;
+    std::string op;
+    std::unique_ptr<Expression> right;
+
+    void expression_node() const {}
+    std::string token_literal() const;
+    std::string string() const;
+};
+
+struct InfixExpression : Expression {
+    lexer::Token token;
+    std::unique_ptr<Expression> left;
+    std::string op;
+    std::unique_ptr<Expression> right;
+
     void expression_node() const {}
     std::string token_literal() const;
     std::string string() const;
@@ -95,6 +127,26 @@ struct Parser {
         next_token();
         next_token();
         register_prefix(lexer::TokenType::ID, std::bind(&Parser::parse_identifier, this));
+        register_prefix(lexer::TokenType::INT, std::bind(&Parser::parse_integer_literal, this));
+        register_prefix(lexer::TokenType::BANG, std::bind(&Parser::parse_prefix_expression, this));
+        register_prefix(lexer::TokenType::MINUS, std::bind(&Parser::parse_prefix_expression, this));
+
+        register_infix(lexer::TokenType::PLUS, 
+            std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
+        register_infix(lexer::TokenType::MINUS, 
+            std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
+        register_infix(lexer::TokenType::FSLASH, 
+            std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
+        register_infix(lexer::TokenType::ASTERISK, 
+            std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
+        register_infix(lexer::TokenType::EQ, 
+            std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
+        register_infix(lexer::TokenType::NEQ, 
+            std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
+        register_infix(lexer::TokenType::LT, 
+            std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
+        register_infix(lexer::TokenType::GT, 
+            std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
     };
 
     void next_token(){
@@ -106,6 +158,9 @@ struct Parser {
     bool _peek_tok_is(lexer::TokenType t); 
     bool _expect_peek(lexer::TokenType t);
     void _peek_error(lexer::TokenType t);
+    int _peek_precedence();
+    int _cur_precedence();
+
     vector<string> get_errors();
 
     std::unique_ptr<LetStatement> parse_let_statement();
@@ -114,10 +169,12 @@ struct Parser {
 
     std::unique_ptr<Program> parse_program();
     std::unique_ptr<Statement> parse_statement();
-    std::unique_ptr<Expression> parse_expression();
-    std::unique_ptr<Expression> parse_identifier();
 
-    
+    std::unique_ptr<Expression> parse_expression(int precedence);
+    std::unique_ptr<Expression> parse_identifier();
+    std::unique_ptr<Expression> parse_integer_literal();
+    std::unique_ptr<Expression> parse_prefix_expression();
+    std::unique_ptr<Expression> parse_infix_expression(std::unique_ptr<Expression> left);
 
     void register_prefix(lexer::TokenType token_type, 
         std::function<std::unique_ptr<Expression>()> fn);
@@ -129,5 +186,9 @@ void test_let_statements();
 void test_ret_statements();
 void test_string();
 void test_identifier_expression();
+void test_integer_literal_expression();
+void test_parsing_prefix_expression();
+void test_parsing_infix_expression();
+void test_operator_precedence_parsing();
 
 }

@@ -1,4 +1,5 @@
 #include "parser.h"
+#include <cstdint>
 #include <cstdio>
 #include <memory>
 #include <fmt/format.h>
@@ -16,6 +17,17 @@ enum operation_prec {
     CALL
 };
 
+unordered_map<lexer::TokenType, int> precedences = {
+    {lexer::TokenType::EQ, operation_prec::EQUALS},    
+    {lexer::TokenType::NEQ, operation_prec::EQUALS},    
+    {lexer::TokenType::LT, operation_prec::LESSGREATER},    
+    {lexer::TokenType::GT, operation_prec::LESSGREATER},    
+    {lexer::TokenType::PLUS, operation_prec::SUM},    
+    {lexer::TokenType::MINUS, operation_prec::SUM},    
+    {lexer::TokenType::FSLASH, operation_prec::PRODUCT},    
+    {lexer::TokenType::ASTERISK, operation_prec::PRODUCT},    
+};
+
 std::string LetStatement::token_literal() const {
     return let_token.val;
 }
@@ -29,6 +41,18 @@ std::string ExpressionStatement::token_literal() const {
 }
 
 std::string Identifier::token_literal() const {
+    return token.val;
+}
+
+std::string IntegerLiteral::token_literal() const {
+    return token.val;
+}
+
+std::string PrefixExpression::token_literal() const {
+    return token.val;
+}
+
+std::string InfixExpression::token_literal() const {
     return token.val;
 }
 
@@ -49,6 +73,22 @@ bool Parser::_expect_peek(lexer::TokenType t){
         return false;
     }
 }
+
+int Parser::_peek_precedence(){
+    if(precedences.find(peek_token.type) != precedences.end()){
+        return precedences[peek_token.type]; 
+    }
+    return operation_prec::LOWEST;
+}
+
+int Parser::_cur_precedence(){
+    if(precedences.find(cur_token.type) != precedences.end()){
+        return precedences[cur_token.type]; 
+    }
+    return operation_prec::LOWEST;
+}
+
+
 
 vector<std::string> Parser::get_errors(){
     return errors;
@@ -96,18 +136,56 @@ unique_ptr<ReturnStatement> Parser::parse_ret_statement(){
     return stmt;
 }
 
-unique_ptr<Expression> Parser::parse_expression(){
+
+unique_ptr<Expression> Parser::parse_expression(int precedence = 0){
     auto prefix = prefix_parse_fns[cur_token.type];
     if(prefix == nullptr){
+        errors.push_back(fmt::format("no prefix parse function found for {} found\n",
+            lexer::enum_to_string(cur_token.type)));
         return nullptr;
     }
-
     auto left_expr = prefix();
+
+    while(!_peek_tok_is(lexer::TokenType::SEMICOLON) && precedence < _peek_precedence()){
+        auto infix = infix_parse_fns[peek_token.type];
+        if(infix == nullptr){
+            return left_expr;
+        }
+
+        next_token();
+        left_expr = infix(std::move(left_expr));
+    }
     return left_expr;
 }
 
 unique_ptr<Expression> Parser::parse_identifier(){
     return std::make_unique<Identifier>(cur_token, cur_token.val);
+}
+
+unique_ptr<Expression> Parser::parse_integer_literal(){
+    auto val = cur_token.val;
+    return std::make_unique<IntegerLiteral>(cur_token, stoi(val));
+}
+
+unique_ptr<Expression> Parser::parse_prefix_expression(){
+    auto expression = std::make_unique<PrefixExpression>();
+    expression->token = cur_token;
+    expression->op = cur_token.val;
+    next_token();
+    expression->right = parse_expression(operation_prec::PREFIX);
+    return expression;
+}
+
+unique_ptr<Expression> Parser::parse_infix_expression(unique_ptr<Expression> left){
+    auto expression = std::make_unique<InfixExpression>();
+    expression->token = cur_token;
+    expression->left = std::move(left);
+    expression->op = cur_token.val;
+
+    int prec = _cur_precedence();
+    next_token();
+    expression->right = parse_expression(prec);
+    return expression;
 }
 
 unique_ptr<ExpressionStatement> Parser::parse_expression_statement(){
@@ -182,6 +260,30 @@ std::string Identifier::string() const {
     return value;
 }
 
+std::string IntegerLiteral::string() const {
+    return token.val;
+}
+
+std::string PrefixExpression::string() const {
+    std::string pref_expr_string = "";
+    pref_expr_string += "(";
+    // pref_expr_string += " " + op + " ";
+    pref_expr_string += op;
+    pref_expr_string += right->string();
+    pref_expr_string += ")";
+    return pref_expr_string;
+}
+
+std::string InfixExpression::string() const {
+    std::string inf_expr_string = "";
+    inf_expr_string += "(";
+    inf_expr_string += left->string();
+    inf_expr_string += " " + op + " ";
+    inf_expr_string += right->string();
+    inf_expr_string += ")";
+    return inf_expr_string;
+}
+
 void Parser::register_prefix(lexer::TokenType token_type,
     std::function<std::unique_ptr<Expression>()> fn){
     prefix_parse_fns[token_type] = fn;
@@ -224,6 +326,7 @@ void check_parse_errors(vector<std::string> errors){
     for(auto &s: errors){
         printf("parser error: %s\n", s.c_str());
     }
+    exit(1);
     return;
 }
 
@@ -370,5 +473,179 @@ void test_identifier_expression(){
 
 }
 
+
+void test_integer_literal_expression(){
+    std::string input = "5;";
+    auto l = lexer::Lexer(input);
+    auto p = Parser(l);
+    auto program = p.parse_program();
+
+    check_parse_errors(p.get_errors());
+
+    if(program->statements.size() != 1){
+        printf("[error] program has no enough statements %ld\n", program->statements.size());
+        return;
+    }
+
+    const ExpressionStatement* stmt = 
+        dynamic_cast<ExpressionStatement*>(program->statements[0].get());
+
+    if(stmt == nullptr){
+        printf("[error] first statement is not expression statement \n");
+        return;
+    }
+
+    const IntegerLiteral* literal = dynamic_cast<IntegerLiteral*>(stmt->expr.get());
+    if(literal == nullptr){
+        printf("[error] exp not integer literal\n");
+        return;
+    }
+
+    if(literal->val != 5){
+        printf("[error] literal value is not %ld, got %ld\n", 5l, literal->val);
+        return;
+    }
+
+    if(literal->token_literal() != "5"){
+        printf("[error] literal.token_literal() is not %s, got %s\n", 
+            "5", literal->token_literal().c_str());
+        return;
+    }
+    return;
+}
+
+void test_parsing_prefix_expression(){
+    struct PrefixTest{
+        std::string input;
+        std::string op;
+        int64_t interger_val;
+    };
+
+    std::vector<PrefixTest> prefix_tests = {
+        {"!5;", "!" , 5},
+        {"-15", "-", 15}
+    };
+
+    for(int i=0; i<prefix_tests.size(); i++){
+        auto l = lexer::Lexer(prefix_tests[i].input);
+        auto p = Parser(l);
+        auto program = p.parse_program();
+        check_parse_errors(p.get_errors());
+
+        if(program->statements.size() != 1){
+            printf("[error] program does not contain %d statements, got %ld\n", 
+                1, program->statements.size());
+            return;
+        }
+
+        const ExpressionStatement* stmt = dynamic_cast<ExpressionStatement*>(program->statements[0].get());
+        if(stmt == nullptr){
+            printf("[error] statement is not expression statement\n");
+            return;
+        }
+
+        const PrefixExpression* exp = dynamic_cast<PrefixExpression*>(stmt->expr.get());
+        if(exp == nullptr){
+            printf("[error] statement is not prefix expression\n");
+            return;
+        }
+
+        if(exp->op != prefix_tests[i].op){
+            printf("[error] operator mismatch actual is '%s' but got %s\n", prefix_tests[i].op.c_str(), 
+                exp->op.c_str());
+            return;
+        }
+
+        // not checking the validity of integer literal :)
+
+    }
+
+    return;
+}
+
+void test_parsing_infix_expression(){
+    struct InfixTest{
+        std::string input;
+        int64_t left_value;
+        std::string op;
+        int64_t right_value;
+    };
+
+    vector<InfixTest> infix_tests = {
+        {"5+5;", 5, "+", 5},
+        {"5-5;", 5, "-", 5},
+        {"5*5;", 5, "*", 5},
+        {"5/5;", 5, "/", 5},
+        {"5>5;", 5, ">", 5},
+        {"5<5;", 5, "<", 5},
+        {"5==5;", 5, "==", 5},
+        {"5!=5;", 5, "!=", 5},
+    };
+
+    for(int i=0; i<infix_tests.size(); i++){
+        auto l = lexer::Lexer(infix_tests[i].input);
+        auto p = Parser(l);
+        auto program = p.parse_program();
+        check_parse_errors(p.get_errors());
+
+        if(program->statements.size() != 1){
+            printf("[error] program does not contain %d statements, got %ld\n", 
+                1, program->statements.size());
+            return;
+        }
+
+        const ExpressionStatement* stmt = dynamic_cast<ExpressionStatement*>(program->statements[0].get());
+        if(stmt == nullptr){
+            printf("[error] statement is not expression statement\n");
+            return;
+        }
+
+        const InfixExpression* expr = dynamic_cast<InfixExpression*>(stmt->expr.get());
+        if(expr == nullptr){
+            printf("[error] the given statement does not have infix expr\n");
+            return;
+        }
+
+    }
+    return;
+}
+
+void test_operator_precedence_parsing(){
+    struct Test{
+        std::string input;
+        std::string expected;
+    };
+
+    vector<Test> tests = {
+        {"-a * b", "((-a) * b)"},
+        {"!-a", "(!(-a))"},
+        {"a + b + c", "((a + b) + c)"},
+        {"a + b - c", "((a + b) - c)"},
+        {"a * b * c", "((a * b) * c)"},
+        {"a * b / c", "((a * b) / c)"},
+        {"a + b / c", "(a + (b / c))"},
+        {"a + b * c + d / e - f", "(((a + (b * c)) + (d / e)) - f)"},
+        {"3 + 4; -5 * 5","(3 + 4)((-5) * 5)"},
+        {"5 > 4 == 3 < 4", "((5 > 4) == (3 < 4))"},
+        {"5 < 4 != 3 > 4","((5 < 4) != (3 > 4))"},
+        {"3 + 4 * 5 == 3 * 1 + 4 * 5","((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"},
+        {"3 + 4 * 5 == 3 * 1 + 4 * 5","((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"},
+    };
+
+    for(int i=0; i<tests.size(); i++){
+        auto l = lexer::Lexer(tests[i].input);
+        auto p = Parser(l);
+        auto program = p.parse_program();
+        check_parse_errors(p.get_errors());
+
+        auto actual = program->string();
+        if(actual != tests[i].expected){
+            printf("[error] expected %s, got %s\n", 
+                tests[i].expected.c_str(), actual.c_str());
+        }
+    }
+
+    return;
+}
 
 }
