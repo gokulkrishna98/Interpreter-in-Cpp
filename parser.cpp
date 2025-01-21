@@ -1,9 +1,12 @@
 #include "parser.h"
+#include <any>
 #include <cstdint>
 #include <cstdio>
-#include <memory>
 #include <fmt/format.h>
-#include <unordered_map>
+#include <ios>
+#include <memory>
+#include <typeinfo>
+#include <iostream>
 
 namespace parser {
 
@@ -45,6 +48,10 @@ std::string Identifier::token_literal() const {
 }
 
 std::string IntegerLiteral::token_literal() const {
+    return token.val;
+}
+
+std::string Boolean::token_literal() const {
     return token.val;
 }
 
@@ -136,6 +143,9 @@ unique_ptr<ReturnStatement> Parser::parse_ret_statement(){
     return stmt;
 }
 
+unique_ptr<Expression> Parser::parse_boolean(){
+    return std::make_unique<Boolean>(cur_token, _cur_tok_is(lexer::TokenType::TRUE));
+}
 
 unique_ptr<Expression> Parser::parse_expression(int precedence = 0){
     auto prefix = prefix_parse_fns[cur_token.type];
@@ -264,6 +274,10 @@ std::string IntegerLiteral::string() const {
     return token.val;
 }
 
+std::string Boolean::string() const {
+    return token.val;
+}
+
 std::string PrefixExpression::string() const {
     std::string pref_expr_string = "";
     pref_expr_string += "(";
@@ -294,6 +308,102 @@ void Parser::register_infix(lexer::TokenType token_type,
     infix_parse_fns[token_type] = fn;
 }
 
+bool test_integer_integral(std::unique_ptr<Expression> il, int64_t value){
+    const IntegerLiteral* integ = dynamic_cast<IntegerLiteral*>(il.get());
+    if(integ == nullptr){
+        printf("[error] did not recieve integer literal expression\n");
+        return false;
+    }
+    if(integ->val != value){
+        printf("[error] integer value mismatch\n");
+        return false;
+    }
+    if(integ->token_literal() != fmt::to_string(value)){
+        printf("[error] integer.token_literal() value mismatch\n");
+        return false;
+    }
+    return true;
+}
+
+bool test_identifier(std::unique_ptr<Expression> exp, std::string value){
+    const Identifier* ident = dynamic_cast<Identifier*>(exp.get());
+    if(ident == nullptr){
+        printf("[error] did not recieve identifier expression\n");
+        return false;
+    }
+    if(ident->value != value){
+        printf("[error] id value mismatch\n");
+        return false;
+    }
+    if(ident->token_literal() != value){
+        printf("[error] ident.token_literal() value mismatch\n");
+        return false;
+    }
+    return true;
+}
+
+bool test_boolean_literal(std::unique_ptr<Expression> exp, bool value){
+    const Boolean* bo = dynamic_cast<Boolean*>(exp.get());
+    if(bo == nullptr){
+        printf("[error] expected boolean expression but go something else\n");
+        return false;
+    }
+
+    if(bo->val != value){
+        printf("[error] boolen value mismatch\n");
+        return false;
+    }
+
+    auto bool_to_string = [](bool b){
+        return b ? "true" : "false";
+    };
+    if(bo->token_literal() != bool_to_string(value)){
+        printf("[error] bo.token_literal() value mismatch\n");
+        return false;
+    }
+
+    return true;
+}
+
+bool test_literal_expression(std::unique_ptr<Expression> exp, const std::any& expected){
+    if(expected.type() == typeid(int64_t)){
+        return test_integer_integral(std::move(exp), std::any_cast<int64_t>(expected));
+    }else if(expected.type() == typeid(std::string)){
+        return test_identifier(std::move(exp), std::any_cast<std::string>(expected));
+    }else if(expected.type() == typeid(bool)){
+        return test_boolean_literal(std::move(exp), std::any_cast<bool>(expected));
+    }else{
+        printf("[error] expected type not handled\n");
+    }
+    return false;
+}
+
+bool test_infix_expression(std::unique_ptr<Expression> exp, 
+    const std::any &left, std::string op, const std::any &right){
+    const InfixExpression* op_exp = dynamic_cast<InfixExpression*>(exp.get());
+    if(op_exp == nullptr){
+        printf("[error] the experession is not infix expression\n");
+        return false;
+    }
+
+    std::unique_ptr<InfixExpression> inf_expr = 
+        std::unique_ptr<InfixExpression>(dynamic_cast<InfixExpression*>(exp.release()));
+
+    if(!test_literal_expression(std::move(inf_expr->left), left)){
+        return false;
+    }
+
+    if(inf_expr->op != op){
+        printf("[error] operator mismatch \n");
+        return false;
+    }
+
+    if(!test_literal_expression(std::move(inf_expr->right), right)){
+        return false;
+    }
+
+    return true;
+}
 
 
 bool test_let_statement(const Statement* s, std::string id){
@@ -518,12 +628,14 @@ void test_parsing_prefix_expression(){
     struct PrefixTest{
         std::string input;
         std::string op;
-        int64_t interger_val;
+        std::any val;
     };
 
     std::vector<PrefixTest> prefix_tests = {
-        {"!5;", "!" , 5},
-        {"-15", "-", 15}
+        {"!5;", "!" , (int64_t)5},
+        {"-15", "-", (int64_t)15},
+        {"!true;", "!", true},
+        {"!false;", "!", false},
     };
 
     for(int i=0; i<prefix_tests.size(); i++){
@@ -544,20 +656,22 @@ void test_parsing_prefix_expression(){
             return;
         }
 
-        const PrefixExpression* exp = dynamic_cast<PrefixExpression*>(stmt->expr.get());
+        // TODO: make it const and implement clone
+        PrefixExpression* exp = dynamic_cast<PrefixExpression*>(stmt->expr.get());
         if(exp == nullptr){
             printf("[error] statement is not prefix expression\n");
             return;
         }
-
         if(exp->op != prefix_tests[i].op){
             printf("[error] operator mismatch actual is '%s' but got %s\n", prefix_tests[i].op.c_str(), 
                 exp->op.c_str());
             return;
         }
+        std::unique_ptr<Expression> right = std::move(exp->right);
 
-        // not checking the validity of integer literal :)
-
+        if(!test_literal_expression(std::move(right), prefix_tests[i].val)){
+            return;
+        }
     }
 
     return;
@@ -566,20 +680,24 @@ void test_parsing_prefix_expression(){
 void test_parsing_infix_expression(){
     struct InfixTest{
         std::string input;
-        int64_t left_value;
+        std::any left_value;
         std::string op;
-        int64_t right_value;
+        std::any right_value;
     };
 
     vector<InfixTest> infix_tests = {
-        {"5+5;", 5, "+", 5},
-        {"5-5;", 5, "-", 5},
-        {"5*5;", 5, "*", 5},
-        {"5/5;", 5, "/", 5},
-        {"5>5;", 5, ">", 5},
-        {"5<5;", 5, "<", 5},
-        {"5==5;", 5, "==", 5},
-        {"5!=5;", 5, "!=", 5},
+    {"5+5;", (int64_t)5, "+", (int64_t)5},
+    {"5+5;", (int64_t)5, "+", (int64_t)5},
+    {"5-5;", (int64_t)5, "-", (int64_t)5},
+    {"5*5;", (int64_t)5, "*", (int64_t)5},
+    {"5/5;", (int64_t)5, "/", (int64_t)5},
+    {"5>5;", (int64_t)5, ">", (int64_t)5},
+    {"5<5;", (int64_t)5, "<", (int64_t)5},
+    {"5==5;", (int64_t)5, "==", (int64_t)5},
+    {"5!=5;", (int64_t)5, "!=", (int64_t)5},
+    {"true == true", true, "==", true},
+    {"true != false", true, "!=", false},
+    {"false == false", false, "==", false}
     };
 
     for(int i=0; i<infix_tests.size(); i++){
@@ -600,12 +718,26 @@ void test_parsing_infix_expression(){
             return;
         }
 
-        const InfixExpression* expr = dynamic_cast<InfixExpression*>(stmt->expr.get());
-        if(expr == nullptr){
+        InfixExpression* inf_expr = dynamic_cast<InfixExpression*>(stmt->expr.get());
+        if(inf_expr == nullptr){
             printf("[error] the given statement does not have infix expr\n");
             return;
         }
 
+        std::unique_ptr<Expression> left_expr = std::move(inf_expr->left);
+        std::unique_ptr<Expression> right_expr = std::move(inf_expr->right);
+        if(!test_literal_expression(std::move(left_expr), infix_tests[i].left_value)){
+            return;
+        }
+
+        if(inf_expr->op != infix_tests[i].op){
+            printf("[error] infix operator mismatch\n");
+            return;
+        }
+
+        if(!test_literal_expression(std::move(right_expr), infix_tests[i].right_value)){
+            return;
+        }
     }
     return;
 }
@@ -625,11 +757,17 @@ void test_operator_precedence_parsing(){
         {"a * b / c", "((a * b) / c)"},
         {"a + b / c", "(a + (b / c))"},
         {"a + b * c + d / e - f", "(((a + (b * c)) + (d / e)) - f)"},
-        {"3 + 4; -5 * 5","(3 + 4)((-5) * 5)"},
+        {"3 + 4; -5 * 5", "(3 + 4)((-5) * 5)"},
         {"5 > 4 == 3 < 4", "((5 > 4) == (3 < 4))"},
-        {"5 < 4 != 3 > 4","((5 < 4) != (3 > 4))"},
-        {"3 + 4 * 5 == 3 * 1 + 4 * 5","((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"},
-        {"3 + 4 * 5 == 3 * 1 + 4 * 5","((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"},
+        {"5 < 4 != 3 > 4", "((5 < 4) != (3 > 4))"},
+        {"3 + 4 * 5 == 3 * 1 + 4 * 5",
+         "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"},
+        {"3 + 4 * 5 == 3 * 1 + 4 * 5",
+         "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"},
+        {"true", "true"},
+        {"false", "false"},
+        {"3 > 5 == false","((3 > 5) == false)"},
+        {"3 < 5 == true","((3 < 5) == true)"},
     };
 
     for(int i=0; i<tests.size(); i++){

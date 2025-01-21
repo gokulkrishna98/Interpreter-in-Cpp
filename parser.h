@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <string>
+#include <any>
 #include <unordered_map>
 #include <vector>
 #include <memory>
@@ -43,6 +44,16 @@ struct IntegerLiteral : Expression {
     int64_t val;
 
     IntegerLiteral(lexer::Token token, int64_t val) : token(token), val(val){}
+    void expression_node() const {}
+    std::string token_literal() const;
+    std::string string() const;
+};
+
+struct Boolean : Expression {
+    lexer::Token token;
+    bool val;
+
+    Boolean(lexer::Token token, bool val) : token(token), val(val) {};
     void expression_node() const {}
     std::string token_literal() const;
     std::string string() const;
@@ -130,6 +141,8 @@ struct Parser {
         register_prefix(lexer::TokenType::INT, std::bind(&Parser::parse_integer_literal, this));
         register_prefix(lexer::TokenType::BANG, std::bind(&Parser::parse_prefix_expression, this));
         register_prefix(lexer::TokenType::MINUS, std::bind(&Parser::parse_prefix_expression, this));
+        register_prefix(lexer::TokenType::TRUE, std::bind(&Parser::parse_boolean, this));
+        register_prefix(lexer::TokenType::FALSE, std::bind(&Parser::parse_boolean, this));
 
         register_infix(lexer::TokenType::PLUS, 
             std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
@@ -170,6 +183,7 @@ struct Parser {
     std::unique_ptr<Program> parse_program();
     std::unique_ptr<Statement> parse_statement();
 
+    std::unique_ptr<Expression> parse_boolean();
     std::unique_ptr<Expression> parse_expression(int precedence);
     std::unique_ptr<Expression> parse_identifier();
     std::unique_ptr<Expression> parse_integer_literal();
@@ -190,5 +204,5 @@ void test_integer_literal_expression();
 void test_parsing_prefix_expression();
 void test_parsing_infix_expression();
 void test_operator_precedence_parsing();
-
+void test_infix_expression(std::unique_ptr<Expression> exp, const std::any& expected);
 }
