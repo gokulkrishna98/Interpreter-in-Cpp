@@ -143,6 +143,7 @@ struct Parser {
         register_prefix(lexer::TokenType::MINUS, std::bind(&Parser::parse_prefix_expression, this));
         register_prefix(lexer::TokenType::TRUE, std::bind(&Parser::parse_boolean, this));
         register_prefix(lexer::TokenType::FALSE, std::bind(&Parser::parse_boolean, this));
+        register_prefix(lexer::TokenType::LPAREN, std::bind(&Parser::parse_grouped_expression, this));
 
         register_infix(lexer::TokenType::PLUS, 
             std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
@@ -185,6 +186,7 @@ struct Parser {
 
     std::unique_ptr<Expression> parse_boolean();
     std::unique_ptr<Expression> parse_expression(int precedence);
+    std::unique_ptr<Expression> parse_grouped_expression();
     std::unique_ptr<Expression> parse_identifier();
     std::unique_ptr<Expression> parse_integer_literal();
     std::unique_ptr<Expression> parse_prefix_expression();

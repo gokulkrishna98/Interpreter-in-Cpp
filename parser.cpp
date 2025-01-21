@@ -147,6 +147,15 @@ unique_ptr<Expression> Parser::parse_boolean(){
     return std::make_unique<Boolean>(cur_token, _cur_tok_is(lexer::TokenType::TRUE));
 }
 
+unique_ptr<Expression> Parser::parse_grouped_expression(){
+    next_token();
+    auto exp = parse_expression(operation_prec::LOWEST);
+    if(!_expect_peek(lexer::TokenType::RPAREN)){
+        return nullptr;
+    }
+    return exp;
+}
+
 unique_ptr<Expression> Parser::parse_expression(int precedence = 0){
     auto prefix = prefix_parse_fns[cur_token.type];
     if(prefix == nullptr){
@@ -766,8 +775,13 @@ void test_operator_precedence_parsing(){
          "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"},
         {"true", "true"},
         {"false", "false"},
-        {"3 > 5 == false","((3 > 5) == false)"},
-        {"3 < 5 == true","((3 < 5) == true)"},
+        {"3 > 5 == false", "((3 > 5) == false)"},
+        {"3 < 5 == true", "((3 < 5) == true)"},
+        {"1 + (2 + 3) + 4", "((1 + (2 + 3)) + 4)"},
+        {"(5 + 5) * 2", "((5 + 5) * 2)"},
+        {"2 / (5 + 5)", "(2 / (5 + 5))"},
+        {"-(5 + 5)", "(-(5 + 5))"},
+        {"!(true == true)", "(!(true == true))"},
     };
 
     for(int i=0; i<tests.size(); i++){
