@@ -80,6 +80,24 @@ struct InfixExpression : Expression {
     std::string string() const;
 };
 
+struct BlockStatement : Statement {
+    lexer::Token token;
+    vector<std::unique_ptr<Statement>> statements;
+    void statement_node() const {}
+    std::string token_literal() const;
+    std::string string() const;
+};
+
+struct IfExpression : Expression {
+    lexer::Token token; // if token
+    std::unique_ptr<Expression> cond;
+    std::unique_ptr<BlockStatement> consequence;
+    std::unique_ptr<BlockStatement> alternative;
+
+    void expression_node() const {}
+    std::string token_literal() const;
+    std::string string() const;
+};
 
 // syntax:
 // let-statement := <let> <name> `=` <expression> 
@@ -144,6 +162,7 @@ struct Parser {
         register_prefix(lexer::TokenType::TRUE, std::bind(&Parser::parse_boolean, this));
         register_prefix(lexer::TokenType::FALSE, std::bind(&Parser::parse_boolean, this));
         register_prefix(lexer::TokenType::LPAREN, std::bind(&Parser::parse_grouped_expression, this));
+        register_prefix(lexer::TokenType::IF, std::bind(&Parser::parse_if_expression, this));
 
         register_infix(lexer::TokenType::PLUS, 
             std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
@@ -180,6 +199,7 @@ struct Parser {
     std::unique_ptr<LetStatement> parse_let_statement();
     std::unique_ptr<ReturnStatement> parse_ret_statement();
     std::unique_ptr<ExpressionStatement> parse_expression_statement();
+    std::unique_ptr<BlockStatement> parse_block_statement();
 
     std::unique_ptr<Program> parse_program();
     std::unique_ptr<Statement> parse_statement();
@@ -188,9 +208,10 @@ struct Parser {
     std::unique_ptr<Expression> parse_expression(int precedence);
     std::unique_ptr<Expression> parse_grouped_expression();
     std::unique_ptr<Expression> parse_identifier();
+    std::unique_ptr<Expression> parse_if_expression();
+    std::unique_ptr<Expression> parse_infix_expression(std::unique_ptr<Expression> left);
     std::unique_ptr<Expression> parse_integer_literal();
     std::unique_ptr<Expression> parse_prefix_expression();
-    std::unique_ptr<Expression> parse_infix_expression(std::unique_ptr<Expression> left);
 
     void register_prefix(lexer::TokenType token_type, 
         std::function<std::unique_ptr<Expression>()> fn);
@@ -207,4 +228,5 @@ void test_parsing_prefix_expression();
 void test_parsing_infix_expression();
 void test_operator_precedence_parsing();
 void test_infix_expression(std::unique_ptr<Expression> exp, const std::any& expected);
+void test_if_expression();
 }

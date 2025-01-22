@@ -5,6 +5,7 @@
 #include <fmt/format.h>
 #include <memory>
 #include <typeinfo>
+
 namespace parser {
 
 enum operation_prec {
@@ -27,6 +28,15 @@ unordered_map<lexer::TokenType, int> precedences = {
     {lexer::TokenType::FSLASH, operation_prec::PRODUCT},    
     {lexer::TokenType::ASTERISK, operation_prec::PRODUCT},    
 };
+
+
+std::string BlockStatement::token_literal() const {
+    return token.val;
+}
+
+std::string IfExpression::token_literal() const {
+    return token.val;
+}
 
 std::string LetStatement::token_literal() const {
     return let_token.val;
@@ -183,6 +193,31 @@ unique_ptr<Expression> Parser::parse_integer_literal(){
     return std::make_unique<IntegerLiteral>(cur_token, stoi(val));
 }
 
+
+unique_ptr<Expression> Parser::parse_if_expression(){
+    auto expression = std::make_unique<IfExpression>();
+    expression->token = cur_token;
+    if(!_expect_peek(lexer::TokenType::LPAREN))
+        return nullptr;
+    next_token();
+    expression->cond = parse_expression(operation_prec::LOWEST);
+    if(!_expect_peek(lexer::TokenType::RPAREN))
+        return nullptr;
+    if(!_expect_peek(lexer::TokenType::LBRAC))
+        return nullptr;
+    expression->consequence = parse_block_statement(); 
+
+    if(_peek_tok_is(lexer::TokenType::ELSE)){
+        next_token();
+        if(!_expect_peek(lexer::TokenType::LBRAC)){
+            return nullptr;
+        }
+        expression->alternative = parse_block_statement();
+    }
+
+    return expression;
+}
+
 unique_ptr<Expression> Parser::parse_prefix_expression(){
     auto expression = std::make_unique<PrefixExpression>();
     expression->token = cur_token;
@@ -214,6 +249,20 @@ unique_ptr<ExpressionStatement> Parser::parse_expression_statement(){
     return stmt;
 }
 
+unique_ptr<BlockStatement> Parser::parse_block_statement(){
+    auto block = std::make_unique<BlockStatement>();
+    block->token = cur_token;
+    next_token();
+    while(!_cur_tok_is(lexer::TokenType::RBRAC) && !_cur_tok_is(lexer::TokenType::ENDOF)){
+        auto stmt = parse_statement();
+        if(stmt != nullptr){
+            block->statements.push_back(std::move(stmt));
+        }
+        next_token(); // eating semi-colon
+    }
+    return block;
+}
+
 unique_ptr<Statement> Parser::parse_statement(){
     switch(cur_token.type){
         case lexer::TokenType::LET: return parse_let_statement();
@@ -241,6 +290,15 @@ std::string Program::string() const{
         program_string += stmt->string();
     }
     return program_string;
+}
+
+std::string BlockStatement::string() const {
+    std::string block_str = "{\n";
+    for(int i=0; i<statements.size(); i++){
+        block_str += statements[i]->string() + "\n";
+    }
+    block_str += "}";
+    return block_str;
 }
 
 std::string LetStatement::string() const {
@@ -282,6 +340,18 @@ std::string IntegerLiteral::string() const {
 
 std::string Boolean::string() const {
     return token.val;
+}
+
+std::string IfExpression::string() const {
+    std::string if_expr_str = "";
+    if_expr_str += "if";
+    if_expr_str += cond->string();
+    if_expr_str += " ";
+    if_expr_str += consequence->string();
+    if(alternative != nullptr){
+      if_expr_str += alternative->string();
+    }
+    return if_expr_str;
 }
 
 std::string PrefixExpression::string() const {
@@ -376,10 +446,12 @@ bool test_literal_expression(std::unique_ptr<Expression> exp, const std::any& ex
         return test_integer_integral(std::move(exp), std::any_cast<int64_t>(expected));
     }else if(expected.type() == typeid(std::string)){
         return test_identifier(std::move(exp), std::any_cast<std::string>(expected));
+    }else if(expected.type() == typeid(const char*)){
+        return test_identifier(std::move(exp), std::any_cast<const char*>(expected));
     }else if(expected.type() == typeid(bool)){
         return test_boolean_literal(std::move(exp), std::any_cast<bool>(expected));
     }else{
-        printf("[error] expected type not handled\n");
+        printf("[error] expected type not handled, got = %s\n", expected.type().name());
     }
     return false;
 }
@@ -794,6 +866,51 @@ void test_operator_precedence_parsing(){
         }
     }
 
+    return;
+}
+
+void test_if_expression(){
+    std::string input = "if (x < y) { x }";
+    // std::string input = "if (x < y) { x } else { y }";
+    auto l = lexer::Lexer(input);
+    auto p = Parser(l);
+    auto program = p.parse_program();
+    check_parse_errors(p.get_errors());
+
+    if(program->statements.size() != 1){
+        printf("[error] program statements does not contain %d stmts, got %ld\n",
+            1, program->statements.size());
+        return;
+    }
+    auto stmt = dynamic_cast<ExpressionStatement*>(program->statements[0].get());
+    if(stmt == nullptr){
+        printf("[error] the expression given is not expression statement \n");
+        return;
+    }
+    auto if_expr = dynamic_cast<IfExpression*>(stmt->expr.get());
+    if(if_expr == nullptr){
+        printf("[error] the expression given is not a if expression\n");
+        return;
+    }
+    if(!test_infix_expression(std::move(if_expr->cond), "x", "<", "y")){
+        return;
+    }
+    if(if_expr->consequence->statements.size() != 1){
+        printf("[error] consequence is not 1 statements\n");
+        return;
+    }
+    auto consq = dynamic_cast<ExpressionStatement*>(if_expr->consequence->statements[0].get());
+    if(consq == nullptr){
+        printf("[error] did not get expression statement in consequence block\n");
+        return;
+    }
+    if(!test_identifier(std::move(consq->expr), "x")){
+        return;
+    }
+    if(if_expr->alternative != nullptr){
+        printf("[error] alternative is not empty\n");
+        return;
+    }
     return;
 }
 
