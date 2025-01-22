@@ -139,7 +139,7 @@ struct ExpressionStatement : Statement {
     std::string string() const;
 };
 
-struct Program {
+struct Program : Node {
     vector<unique_ptr<Statement>> statements;
     std::string token_literal() const {
         return (!statements.empty()) ? statements[0]->token_literal() : "";

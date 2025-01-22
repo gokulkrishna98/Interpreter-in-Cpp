@@ -1,5 +1,5 @@
 #include "repl.h"
-#include "parser.h"
+#include "evaluator.h"
 #include <string>
 #include <iostream>
 
@@ -40,8 +40,11 @@ void start(){
             }
             continue;
         }
-        std::cout << std::endl;
-        std::cout << program->string() << std::endl;
+        // std::cout << program->string() << std::endl;
+        auto evaluated = eval::eval(std::move(program));
+        if(evaluated != nullptr){
+            std::cout << evaluated->inspect() << std::endl;
+        }
 
     }
 }

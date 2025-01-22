@@ -1,5 +1,5 @@
-// #include "lexer.h"
-#include "parser.h"
+// #include "parser.h"
+#include "evaluator.h"
 #include "repl.h"
 
 using namespace std;
@@ -18,6 +18,7 @@ int main(int argc, char** argv){
     // parser::test_operator_precedence_parsing();
     // parser::test_if_expression();
     // parser::test_call_expression();
+    // eval::test_eval_integer_expression();
     
     return 0;
 }
