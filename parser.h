@@ -99,6 +99,16 @@ struct IfExpression : Expression {
     std::string string() const;
 };
 
+struct CallExpression : Expression {
+    lexer::Token token;
+    std::unique_ptr<Expression> function;
+    std::vector<std::unique_ptr<Expression>> arguments;
+
+    void expression_node() const {}
+    std::string token_literal() const;
+    std::string string() const;
+};
+
 // syntax:
 // let-statement := <let> <name> `=` <expression> 
 struct LetStatement : Statement {
@@ -164,6 +174,7 @@ struct Parser {
         register_prefix(lexer::TokenType::LPAREN, std::bind(&Parser::parse_grouped_expression, this));
         register_prefix(lexer::TokenType::IF, std::bind(&Parser::parse_if_expression, this));
 
+
         register_infix(lexer::TokenType::PLUS, 
             std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
         register_infix(lexer::TokenType::MINUS, 
@@ -180,6 +191,8 @@ struct Parser {
             std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
         register_infix(lexer::TokenType::GT, 
             std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
+        register_infix(lexer::TokenType::LPAREN,
+            std::bind(&Parser::parse_call_expression, this, std::placeholders::_1));
     };
 
     void next_token(){
@@ -212,6 +225,9 @@ struct Parser {
     std::unique_ptr<Expression> parse_infix_expression(std::unique_ptr<Expression> left);
     std::unique_ptr<Expression> parse_integer_literal();
     std::unique_ptr<Expression> parse_prefix_expression();
+    std::unique_ptr<Expression> parse_call_expression(std::unique_ptr<Expression> function);
+
+    std::vector<std::unique_ptr<Expression>> parse_call_arguments();
 
     void register_prefix(lexer::TokenType token_type, 
         std::function<std::unique_ptr<Expression>()> fn);
@@ -229,4 +245,5 @@ void test_parsing_infix_expression();
 void test_operator_precedence_parsing();
 void test_infix_expression(std::unique_ptr<Expression> exp, const std::any& expected);
 void test_if_expression();
+void test_call_expression();
 }

@@ -27,6 +27,7 @@ unordered_map<lexer::TokenType, int> precedences = {
     {lexer::TokenType::MINUS, operation_prec::SUM},    
     {lexer::TokenType::FSLASH, operation_prec::PRODUCT},    
     {lexer::TokenType::ASTERISK, operation_prec::PRODUCT},    
+    {lexer::TokenType::LPAREN, operation_prec::CALL}
 };
 
 
@@ -59,6 +60,10 @@ std::string IntegerLiteral::token_literal() const {
 }
 
 std::string Boolean::token_literal() const {
+    return token.val;
+}
+
+std::string CallExpression::token_literal() const {
     return token.val;
 }
 
@@ -131,11 +136,13 @@ unique_ptr<LetStatement> Parser::parse_let_statement(){
         return nullptr;
     }
 
-    // skipping parsing expr
-    while(!_cur_tok_is(lexer::TokenType::SEMICOLON)){
+    next_token();
+
+    stmt->value = parse_expression(operation_prec::LOWEST);
+
+    if(_peek_tok_is(lexer::TokenType::SEMICOLON)){
         next_token();
     }
-
     return stmt;
 }
 
@@ -143,8 +150,8 @@ unique_ptr<ReturnStatement> Parser::parse_ret_statement(){
     auto stmt = std::make_unique<ReturnStatement>();
     stmt->ret_token = cur_token;
     next_token();
-    // skipping parsing expr
-    while(!_cur_tok_is(lexer::TokenType::SEMICOLON)){
+    stmt->return_value = parse_expression(operation_prec::LOWEST);
+    if(_peek_tok_is(lexer::TokenType::SEMICOLON)){
         next_token();
     }
     return stmt;
@@ -216,6 +223,33 @@ unique_ptr<Expression> Parser::parse_if_expression(){
     }
 
     return expression;
+}
+
+unique_ptr<Expression> Parser::parse_call_expression(std::unique_ptr<Expression> function){
+    auto exp = std::make_unique<CallExpression>(); 
+    exp->function = std::move(function);
+    exp->token = cur_token;
+    exp->arguments = parse_call_arguments();
+    return exp;
+}
+
+std::vector<std::unique_ptr<Expression>> Parser::parse_call_arguments(){
+    std::vector<std::unique_ptr<Expression>> args;
+    if(_peek_tok_is(lexer::TokenType::RPAREN)){
+        next_token();
+        return args;
+    }
+    next_token();
+    args.push_back(parse_expression(operation_prec::LOWEST));
+    while(_peek_tok_is(lexer::TokenType::COMMA)){
+        next_token();
+        next_token();
+        args.push_back(parse_expression(operation_prec::LOWEST));
+    }
+    if(!_expect_peek(lexer::TokenType::RPAREN)){
+        return {};
+    }
+    return args;
 }
 
 unique_ptr<Expression> Parser::parse_prefix_expression(){
@@ -342,6 +376,20 @@ std::string Boolean::string() const {
     return token.val;
 }
 
+std::string CallExpression::string() const {
+    std::string call_expr_str = "";
+    call_expr_str += function->string();
+    call_expr_str += "(";
+    for(int i=0; i<arguments.size(); i++){
+        call_expr_str += arguments[i]->string();
+        if(i != arguments.size()-1){
+            call_expr_str += ", ";
+        }
+    }
+    call_expr_str += ")";
+    return call_expr_str;
+}
+
 std::string IfExpression::string() const {
     std::string if_expr_str = "";
     if_expr_str += "if";
@@ -442,7 +490,9 @@ bool test_boolean_literal(std::unique_ptr<Expression> exp, bool value){
 }
 
 bool test_literal_expression(std::unique_ptr<Expression> exp, const std::any& expected){
-    if(expected.type() == typeid(int64_t)){
+    if(expected.type() == typeid(int)){
+        return test_integer_integral(std::move(exp), (int64_t)std::any_cast<int>(expected));
+    }else if(expected.type() == typeid(int64_t)){
         return test_integer_integral(std::move(exp), std::any_cast<int64_t>(expected));
     }else if(expected.type() == typeid(std::string)){
         return test_identifier(std::move(exp), std::any_cast<std::string>(expected));
@@ -483,14 +533,26 @@ bool test_infix_expression(std::unique_ptr<Expression> exp,
     return true;
 }
 
+void check_parse_errors(vector<std::string> errors){
+    if(errors.empty()){
+        return;
+    }
 
-bool test_let_statement(const Statement* s, std::string id){
+    printf("parser has [%ld] errors\n", errors.size());
+    for(auto &s: errors){
+        printf("parser error: %s\n", s.c_str());
+    }
+    exit(1);
+    return;
+}
+
+bool test_let_statement(std::unique_ptr<Statement> s, std::string id){
     if(s->token_literal() != "let"){
         printf("expected to get `let` but got %s\n", s->token_literal().c_str());
         return false;
     }
 
-    auto let_statment = dynamic_cast<const LetStatement*>(s);
+    auto let_statment = dynamic_cast<const LetStatement*>(s.get());
     if(let_statment == nullptr){
         printf("could not cast statment to let_statement\n");
         return false;
@@ -505,59 +567,41 @@ bool test_let_statement(const Statement* s, std::string id){
     return true;
 }
 
-void check_parse_errors(vector<std::string> errors){
-    if(errors.empty()){
-        return;
-    }
-
-    printf("parser has [%ld] errors\n", errors.size());
-    for(auto &s: errors){
-        printf("parser error: %s\n", s.c_str());
-    }
-    exit(1);
-    return;
-}
 
 void test_let_statements(){
-    std::string input = R"(
-let x = 5;
-let y = 10;
-let foobar = 838383;
-    )";
+    struct LetStmt {
+        std::string input;
+        std::string expected_id;
+        std::any expected_value;
+    };
 
-    input = R"(
-let x 5;
-let = 10;
-let 838383;
-    )";
+    std::vector<LetStmt> let_statements = {
+        {"let x = 5;", "x",5},
+        {"let y = true;", "y",true},
+        {"let foobar = y;", "foobar","y"},
+    };
 
-    auto l = lexer::Lexer(input);
-    auto p = Parser(l);
+    for(int i=0; i<let_statements.size(); i++){
+        auto l = lexer::Lexer(let_statements[i].input);
+        auto p = Parser(l);
+        auto program = p.parse_program();
+        check_parse_errors(p.get_errors());        
 
-    auto program = p.parse_program();
-    check_parse_errors(p.get_errors());
+        if(program->statements.size() != 1){
+            printf("[error] no of statements mismatch, expectd %d got %ld\n", 1, program->statements.size());
+            return;
+        }
+        auto stmt = std::move(program->statements[0]);
+        auto val = dynamic_cast<LetStatement*>(stmt.get());
 
-    if(program == nullptr){
-        printf("parse program returned nullptr\n");
-        return;
-    }
+        if(!test_literal_expression(std::move(val->value), let_statements[i].expected_value)){
+            return;
+        }
 
-    if(program->statements.size() != 3){
-        printf("program does not contain 3 statements: found %ld statements\n",
-            program->statements.size());
-        return;
-    }
-
-    vector<std::string> expected_id = {"x", "y", "foobar"};
-
-    for(int i=0; i<expected_id.size(); i++){
-        const Statement* stmt= program->statements[i].get();
-        if(!test_let_statement(stmt, expected_id[i])){
+        if(!test_let_statement(std::move(stmt), let_statements[i].expected_id)){
             return;
         }
     }
-    printf("[3/3] all test cases passed !!\n");
-    return;
 }
 
 
@@ -851,6 +895,9 @@ void test_operator_precedence_parsing(){
         {"2 / (5 + 5)", "(2 / (5 + 5))"},
         {"-(5 + 5)", "(-(5 + 5))"},
         {"!(true == true)", "(!(true == true))"},
+        {"a + add(b * c) + d","((a + add((b * c))) + d)"},
+        {"add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))","add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))"},
+        {"add(a + b + c * d / f + g)","add((((a + b) + ((c * d) / f)) + g))"},
     };
 
     for(int i=0; i<tests.size(); i++){
@@ -911,6 +958,46 @@ void test_if_expression(){
         printf("[error] alternative is not empty\n");
         return;
     }
+    return;
+}
+
+void test_call_expression(){
+    std::string input = "add(1, 2*3, 4+5);";
+    auto l = lexer::Lexer(input);
+    auto p = Parser(l);
+    auto program = p.parse_program();
+    check_parse_errors(p.get_errors());
+
+    if(program->statements.size() != 1){
+        printf("[error] program statements does not contain %d stmts, got %ld\n",
+            1, program->statements.size());
+        return;
+    }
+
+    auto stmt = dynamic_cast<ExpressionStatement*>(program->statements[0].get());
+    if(stmt == nullptr){
+        printf("[error] the given statement is not an expression statement \n");
+        return;
+    }
+
+    auto call_expr = dynamic_cast<CallExpression*>(stmt->expr.get());
+    if(call_expr == nullptr){
+        printf("[error] the expression in the statement is not call expression\n");
+        return;
+    }
+
+    if(!test_identifier(std::move(call_expr->function), "add")){
+        return;
+    }
+
+    if(call_expr->arguments.size() != 3){
+        printf("[error] wrong length of the arugments, got %ld\n", call_expr->arguments.size());
+        return;
+    }
+
+    test_literal_expression(std::move(call_expr->arguments[0]), 1);
+    test_infix_expression(std::move(call_expr->arguments[1]), 2, "*", 3);
+    test_infix_expression(std::move(call_expr->arguments[2]), 4, "+", 5);
     return;
 }
 
