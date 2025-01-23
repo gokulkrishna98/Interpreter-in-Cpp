@@ -4,9 +4,9 @@
 
 namespace object {
 
-const std::string BOOLEAN_OBJ = "BOOLEAN";
-const std::string INTEGER_OBJ  = "INTEGER";
-const std::string NULL_OBJ = "NULL";
+ObjectType ReturnValue::type() const {
+    return RETURN_VALUE_OBJ;
+}
 
 ObjectType Boolean::type() const {
     return BOOLEAN_OBJ;
@@ -18,6 +18,10 @@ ObjectType Integer::type() const {
 
 ObjectType Null::type() const {
     return NULL_OBJ;
+}
+
+std::string ReturnValue::inspect() const {
+    return fmt::format("{}", value->inspect());
 }
 
 std::string Boolean::inspect() const {
