@@ -1,5 +1,6 @@
 #include "repl.h"
 #include "evaluator.h"
+#include <memory>
 #include <string>
 #include <iostream>
 
@@ -26,6 +27,7 @@ const char* MONKEY_FACE = R"(
 const string PROMPT = ">>>"; 
 void start(){
     string input;
+    auto environment = std::make_unique<object::Environment>();
     while(true){
         cout << PROMPT;
         getline(cin, input);
@@ -41,7 +43,8 @@ void start(){
             continue;
         }
         // std::cout << program->string() << std::endl;
-        auto evaluated = eval::eval(std::move(program));
+        auto evaluated = 
+            eval::eval(std::move(program), environment);
         if(evaluated != nullptr){
             std::cout << evaluated->inspect() << std::endl;
         }

@@ -9,7 +9,8 @@ evaluator:
 repl:
 	clang++ -c repl.cpp -o repl.out -std=c++23
 interp:
-	clang++ main.cpp lexer.out repl.out parser.out object.out eval.out -o interp.out \
+	clang++ main.cpp \
+		lexer.out repl.out parser.out object.out eval.out -o interp.out \
 		-std=c++23 \
 		-I/usr/include -L/usr/lib -lfmt
 all:
