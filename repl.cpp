@@ -24,7 +24,7 @@ const char* MONKEY_FACE = R"(
              _/       `--...
                   __
 )";
-const string PROMPT = ">>>"; 
+const string PROMPT = ">>> "; 
 void start(){
     string input;
     auto environment = std::make_unique<object::Environment>();
