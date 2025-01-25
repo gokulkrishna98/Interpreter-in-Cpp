@@ -2,3 +2,5 @@ interp.out
 lexer.out
 repl.out
 parser.out
+eval.out
+object.out
