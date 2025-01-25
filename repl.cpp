@@ -27,7 +27,7 @@ const char* MONKEY_FACE = R"(
 const string PROMPT = ">>> "; 
 void start(){
     string input;
-    auto environment = std::make_unique<object::Environment>();
+    auto environment = std::make_unique<object::Environment>(nullptr);
     while(true){
         cout << PROMPT;
         getline(cin, input);

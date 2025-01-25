@@ -2,7 +2,6 @@
 #define EVALUATOR_H
 
 #include "object.h"
-#include "parser.h"
 #include <memory>
 
 

@@ -3,6 +3,7 @@
 #include <memory>
 #include <utility>
 #include <fmt/format.h>
+#include <vector>
 
 namespace eval {
 
@@ -185,9 +186,67 @@ std::unique_ptr<object::Object> eval_block_statement(std::unique_ptr<parser::Nod
     return result;
 }
 
+std::vector<std::unique_ptr<object::Object>> eval_expressions(
+    std::vector<std::unique_ptr<parser::Expression>> exps, 
+    std::unique_ptr<object::Environment> &env){
+    std::vector<std::unique_ptr<object::Object>> result;
+    for(int i=0; i<exps.size(); i++){
+        auto evaluated = eval(std::move(exps[i]), env);
+        if(is_error(evaluated.get())){
+            result.push_back(std::move(evaluated));
+            return result;
+        }
+        result.push_back(std::move(evaluated));
+    }
+    return std::move(result);
+}
+
+std::unique_ptr<object::Environment> extended_function_env(
+    object::Function* fn, std::vector<std::unique_ptr<object::Object>> args){
+    auto env = object::new_enclosed_environment(fn->environment);
+    for(int i=0; i<fn->parameters.size(); i++){
+        env->set(fn->parameters[i]->value, std::move(args[i]));
+    }
+    return env;
+}
+
+std::unique_ptr<object::Object> unwrap_return_value(std::unique_ptr<object::Object> obj){
+    if(auto ptr = dynamic_cast<object::ReturnValue*>(obj.get())){
+        return std::move(ptr->value);
+    }
+    return obj;
+} 
+
+std::unique_ptr<object::Object> apply_function(std::unique_ptr<object::Object> fn, 
+    std::vector<std::unique_ptr<object::Object>> args){
+    auto function = dynamic_cast<object::Function*>(fn.get());
+    if(function == nullptr){
+        return new_error(fmt::format("not a function: {}", fn->type()));
+    }
+
+    auto extended_env = extended_function_env(function, std::move(args));
+    auto evaluated = eval(std::move(function->body), extended_env);
+    return evaluated;
+}
+
 std::unique_ptr<object::Object> eval(std::unique_ptr<parser::Node> node, 
     std::unique_ptr<object::Environment> &environment){
-    if(auto ptr = dynamic_cast<parser::LetStatement*>(node.get())){
+    if(auto ptr = dynamic_cast<parser::CallExpression*>(node.get())){
+        auto function = eval(std::move(ptr->function), environment);
+        if(is_error(function.get())){
+            return function;
+        }
+        auto args = 
+            std::move(eval_expressions(std::move(ptr->arguments), environment));
+        if(args.size() == 1 && is_error(args[0].get())){
+            return std::move(args[0]);
+        }
+        return apply_function(std::move(function), std::move(args));
+    }else if(auto ptr = dynamic_cast<parser::FunctionLiteral*>(node.get())){
+        auto params = std::move(ptr->parameters);
+        auto body = std::move(ptr->body);
+        return std::make_unique<object::Function>(std::move(params), std::move(body), environment);
+    }else if(auto ptr = dynamic_cast<parser::LetStatement*>(node.get())){
         auto val = eval(std::move(ptr->value), environment);
         if(is_error(val.get())){
             return val;
@@ -237,7 +296,7 @@ std::unique_ptr<object::Object> eval(std::unique_ptr<parser::Node> node,
 std::unique_ptr<object::Object> test_eval(std::string input){
     auto l = lexer::Lexer(input);
     auto p = parser::Parser(l);
-    auto environment = std::make_unique<object::Environment>();
+    auto environment = std::make_unique<object::Environment>(nullptr);
     auto program = p.parse_program();
 
     return eval(std::move(program), environment);

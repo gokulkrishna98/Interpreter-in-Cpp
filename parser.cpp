@@ -59,6 +59,10 @@ std::string IntegerLiteral::token_literal() const {
     return token.val;
 }
 
+std::string FunctionLiteral::token_literal() const {
+    return token.val;
+}
+
 std::string Boolean::token_literal() const {
     return token.val;
 }
@@ -317,6 +321,42 @@ unique_ptr<Program> Parser::parse_program(){
     return program;
 }
 
+std::vector<std::unique_ptr<Identifier>> Parser::parse_function_call_parameters(){
+    std::vector<std::unique_ptr<Identifier>> identifiers;
+    if(_peek_tok_is(lexer::TokenType::RPAREN)){
+        next_token();
+        return identifiers;
+    }
+    next_token();
+    auto ident = std::make_unique<Identifier>(cur_token, cur_token.val);
+    identifiers.push_back(std::move(ident));
+
+    while(_peek_tok_is(lexer::TokenType::COMMA)){
+        next_token();
+        next_token();
+        auto ident = std::make_unique<Identifier>(cur_token,cur_token.val );
+        identifiers.push_back(std::move(ident));
+    }
+    if(!_expect_peek(lexer::TokenType::RPAREN)){
+        return {};
+    }
+
+    return identifiers;
+}
+
+unique_ptr<Expression> Parser::parse_function_literal(){
+    auto lit = std::make_unique<FunctionLiteral>();
+    if(!_expect_peek(lexer::TokenType::LPAREN)){
+        return nullptr;
+    }
+    lit->parameters = parse_function_call_parameters();
+    if(!_expect_peek(lexer::TokenType::LBRAC)){
+        return nullptr;
+    }
+    lit->body = parse_block_statement();
+    return lit;
+}
+
 
 std::string Program::string() const{
     std::string program_string = "";
@@ -372,6 +412,23 @@ std::string IntegerLiteral::string() const {
     return token.val;
 }
 
+std::string FunctionLiteral::string() const {
+    std::string fn_lit_str = "";
+    fn_lit_str += "fn";
+    fn_lit_str += "(";
+    for(int i=0; i<parameters.size(); i++){
+        fn_lit_str += parameters[i]->string();
+        if(i < parameters.size()-1){
+            fn_lit_str += ", ";
+        }
+    }
+
+    fn_lit_str += "){\n";
+    fn_lit_str += body->string();
+    fn_lit_str += "\n}";
+    return fn_lit_str;
+}
+
 std::string Boolean::string() const {
     return token.val;
 }
@@ -420,6 +477,97 @@ std::string InfixExpression::string() const {
     inf_expr_string += right->string();
     inf_expr_string += ")";
     return inf_expr_string;
+}
+
+std::unique_ptr<Statement> BlockStatement::clone() const {
+    auto block_stmt = std::make_unique<BlockStatement>();
+    block_stmt->token = token;
+    for(int i=0; i<statements.size(); i++){
+        block_stmt->statements.push_back(statements[i]->clone());
+    }
+    return block_stmt;
+}
+
+std::unique_ptr<Statement> LetStatement::clone() const {
+    auto let_stmt = std::make_unique<LetStatement>();
+    let_stmt->let_token = let_token;
+    let_stmt->name = 
+        std::unique_ptr<Identifier>(static_cast<Identifier*>(name->clone().release()));
+    let_stmt->value = value->clone();
+    return let_stmt;
+}
+
+std::unique_ptr<Statement> ReturnStatement::clone() const {
+    auto ret_stmt = std::make_unique<ReturnStatement>();
+    ret_stmt->ret_token = ret_token;
+    ret_stmt->return_value = return_value->clone();
+    return ret_stmt;
+}
+
+std::unique_ptr<Statement> ExpressionStatement::clone() const {
+    auto expr_stmt = std::make_unique<ExpressionStatement>();
+    expr_stmt->expr_token = expr_token;
+    expr_stmt->expr = expr->clone();
+    return expr_stmt;
+}
+
+std::unique_ptr<Expression> Identifier::clone() const {
+    return std::make_unique<Identifier>(token, value);
+}
+
+std::unique_ptr<Expression> IntegerLiteral::clone() const {
+    return std::make_unique<IntegerLiteral>(token, val);
+}
+
+std::unique_ptr<Expression> Boolean::clone() const {
+    return std::make_unique<Boolean>(token, val);
+}
+
+std::unique_ptr<Expression> PrefixExpression::clone() const {
+    auto prefix_expr = std::make_unique<PrefixExpression>();
+    prefix_expr->token = token;
+    prefix_expr->op = op;
+    prefix_expr->right = right->clone();
+    return prefix_expr;
+}
+
+std::unique_ptr<Expression> InfixExpression::clone() const {
+    auto infix_expr = std::make_unique<InfixExpression>();
+    infix_expr->token = token;
+    infix_expr->left = left->clone();
+    infix_expr->op = op;
+    infix_expr->right = right->clone();
+    return infix_expr;
+}
+
+std::unique_ptr<Expression> FunctionLiteral::clone() const {
+    auto fn_expr = std::make_unique<FunctionLiteral>();
+    fn_expr->token = token;
+    fn_expr->body = 
+        std::unique_ptr<BlockStatement>(static_cast<BlockStatement*>(body->clone().release()));
+    return fn_expr;
+}
+
+std::unique_ptr<Expression> IfExpression::clone() const {
+    auto if_expr = std::make_unique<IfExpression>();
+    if_expr->token = token;
+    if_expr->cond = cond->clone();
+    if_expr->consequence = 
+        std::unique_ptr<BlockStatement>(static_cast<BlockStatement*>(consequence->clone().release()));
+    if_expr->alternative = 
+        std::unique_ptr<BlockStatement>(static_cast<BlockStatement*>(alternative->clone().release()));
+    return if_expr;
+}
+
+std::unique_ptr<Expression> CallExpression::clone() const {
+    auto call_expr = std::make_unique<CallExpression>();
+    call_expr->token = token;
+    call_expr->function = function->clone();
+    for(int i=0; i<arguments.size(); i++){
+        call_expr->arguments.push_back(std::move(arguments[i]->clone()));
+    }
+
+    return call_expr;
 }
 
 void Parser::register_prefix(lexer::TokenType token_type,

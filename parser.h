@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <any>
@@ -22,10 +23,12 @@ struct Node {
 struct Statement : public Node {
     virtual void statement_node() const = 0;
     virtual ~Statement() {}
+    virtual std::unique_ptr<Statement> clone() const = 0;
 };
 
 struct Expression : public Node {
     virtual void expression_node() const = 0;
+    virtual std::unique_ptr<Expression> clone() const = 0;
     virtual ~Expression() {}
 };
 
@@ -34,9 +37,10 @@ struct Identifier : Expression {
     std::string value;
 
     Identifier(lexer::Token token, std::string value) : token(token), value(value){}
-    void expression_node() const {}
-    std::string token_literal() const;
-    std::string string() const;
+    void expression_node() const override {}
+    std::string token_literal() const override;
+    std::string string() const override;
+    std::unique_ptr<Expression> clone() const override;
 };
 
 struct IntegerLiteral : Expression {
@@ -44,19 +48,22 @@ struct IntegerLiteral : Expression {
     int64_t val;
 
     IntegerLiteral(lexer::Token token, int64_t val) : token(token), val(val){}
-    void expression_node() const {}
-    std::string token_literal() const;
-    std::string string() const;
+    void expression_node() const override {}
+    std::string token_literal() const override;
+    std::string string() const override;
+    std::unique_ptr<Expression> clone() const override;
 };
+
 
 struct Boolean : Expression {
     lexer::Token token;
     bool val;
 
     Boolean(lexer::Token token, bool val) : token(token), val(val) {};
-    void expression_node() const {}
-    std::string token_literal() const;
-    std::string string() const;
+    void expression_node() const override {}
+    std::string token_literal() const override;
+    std::string string() const override;
+    std::unique_ptr<Expression> clone() const override;
 };
 
 struct PrefixExpression : Expression {
@@ -64,9 +71,10 @@ struct PrefixExpression : Expression {
     std::string op;
     std::unique_ptr<Expression> right;
 
-    void expression_node() const {}
-    std::string token_literal() const;
-    std::string string() const;
+    void expression_node() const override {}
+    std::string token_literal() const override;
+    std::string string() const override;
+    std::unique_ptr<Expression> clone() const override;
 };
 
 struct InfixExpression : Expression {
@@ -75,17 +83,29 @@ struct InfixExpression : Expression {
     std::string op;
     std::unique_ptr<Expression> right;
 
-    void expression_node() const {}
-    std::string token_literal() const;
-    std::string string() const;
+    void expression_node() const override {}
+    std::string token_literal() const override;
+    std::string string() const override;
+    std::unique_ptr<Expression> clone() const override;
 };
 
 struct BlockStatement : Statement {
     lexer::Token token;
     vector<std::unique_ptr<Statement>> statements;
-    void statement_node() const {}
-    std::string token_literal() const;
-    std::string string() const;
+    void statement_node() const override {} 
+    std::string token_literal() const override;
+    std::string string() const override;
+    std::unique_ptr<Statement> clone() const override;
+};
+
+struct FunctionLiteral : Expression {
+    lexer::Token token;
+    std::vector<std::unique_ptr<Identifier>> parameters;
+    std::unique_ptr<BlockStatement> body;
+    void expression_node() const override {}
+    std::string token_literal() const override;
+    std::string string() const override;
+    std::unique_ptr<Expression> clone() const override;
 };
 
 struct IfExpression : Expression {
@@ -94,9 +114,10 @@ struct IfExpression : Expression {
     std::unique_ptr<BlockStatement> consequence;
     std::unique_ptr<BlockStatement> alternative;
 
-    void expression_node() const {}
-    std::string token_literal() const;
-    std::string string() const;
+    void expression_node() const override {}
+    std::string token_literal() const override;
+    std::string string() const override;
+    std::unique_ptr<Expression> clone() const override;
 };
 
 struct CallExpression : Expression {
@@ -104,9 +125,10 @@ struct CallExpression : Expression {
     std::unique_ptr<Expression> function;
     std::vector<std::unique_ptr<Expression>> arguments;
 
-    void expression_node() const {}
-    std::string token_literal() const;
-    std::string string() const;
+    void expression_node() const override{}
+    std::string token_literal() const override;
+    std::string string() const override;
+    std::unique_ptr<Expression> clone() const override;
 };
 
 // syntax:
@@ -116,27 +138,30 @@ struct LetStatement : Statement {
     std::unique_ptr<Identifier> name;
     std::unique_ptr<Expression> value;
 
-    void statement_node() const {}
-    std::string token_literal() const;
-    std::string string() const;
+    void statement_node() const override{}
+    std::string token_literal() const override;
+    std::string string() const override;
+    std::unique_ptr<Statement> clone() const override;
 };
 
 struct ReturnStatement : Statement {
     lexer::Token ret_token;
     std::unique_ptr<Expression> return_value;
 
-    void statement_node () const {}
-    std::string token_literal() const;
-    std::string string() const;
+    void statement_node () const override {}
+    std::string token_literal() const override;
+    std::string string() const override;
+    std::unique_ptr<Statement> clone() const override;
 };
 
 struct ExpressionStatement : Statement {
     lexer::Token expr_token; // first token in the expression
     std::unique_ptr<Expression> expr;
 
-    void statement_node () const {}
-    std::string token_literal() const;
-    std::string string() const;
+    void statement_node () const override {}
+    std::string token_literal() const override;
+    std::string string() const override;
+    std::unique_ptr<Statement> clone() const override;
 };
 
 struct Program : Node {
@@ -173,7 +198,7 @@ struct Parser {
         register_prefix(lexer::TokenType::FALSE, std::bind(&Parser::parse_boolean, this));
         register_prefix(lexer::TokenType::LPAREN, std::bind(&Parser::parse_grouped_expression, this));
         register_prefix(lexer::TokenType::IF, std::bind(&Parser::parse_if_expression, this));
-
+        register_prefix(lexer::TokenType::FUNCTION, std::bind(&Parser::parse_function_literal, this));
 
         register_infix(lexer::TokenType::PLUS, 
             std::bind(&Parser::parse_infix_expression, this, std::placeholders::_1));
@@ -224,10 +249,12 @@ struct Parser {
     std::unique_ptr<Expression> parse_if_expression();
     std::unique_ptr<Expression> parse_infix_expression(std::unique_ptr<Expression> left);
     std::unique_ptr<Expression> parse_integer_literal();
+    std::unique_ptr<Expression> parse_function_literal();
     std::unique_ptr<Expression> parse_prefix_expression();
     std::unique_ptr<Expression> parse_call_expression(std::unique_ptr<Expression> function);
 
     std::vector<std::unique_ptr<Expression>> parse_call_arguments();
+    std::vector<std::unique_ptr<Identifier>> parse_function_call_parameters();
 
     void register_prefix(lexer::TokenType token_type, 
         std::function<std::unique_ptr<Expression>()> fn);
