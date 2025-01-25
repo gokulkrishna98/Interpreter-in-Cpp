@@ -24,4 +24,4 @@ run:
 	make all
 	./interp.out
 clean:
-	rm -f interp.out lexer.out repl.out parser.out
+	rm -f interp.out lexer.out repl.out parser.out object.out env.out
